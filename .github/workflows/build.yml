@@ -14,8 +14,11 @@ jobs:
     - name: Checkout Repository Code
       uses: actions/checkout@v4
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
+    # ÇÖZÜM: cl.exe ve x86 derleme ortam değişkenlerini otomatik olarak yükler
+    - name: Initialize Visual Studio Developer Command Prompt
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86
 
     - name: Compile Internal DLL Platform (x86 Release)
       run: |
