@@ -1,0 +1,29 @@
+name: Automated Build Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Repository Code
+      uses: actions/checkout@v4
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Compile Internal DLL Platform (x86 Release)
+      run: |
+        cl.exe /O2 /EHsc /LD /D_USRDLL /D_WINDLL src/*.cpp /link /OUT:FishBot.dll user32.lib gdi32.lib comctl32.lib psapi.lib /INCREMENTAL:NO /RELEASE
+
+    - name: Upload Compiled Executable Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Nostale-FishBot-DLL
+        path: FishBot.dll
+        
