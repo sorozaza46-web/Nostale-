@@ -1,3 +1,4 @@
+// Packetlogger.cpp içerisindeki güncellenmiş kısım:
 #include "Packetlogger.h"
 #include "NostaleString.h"
 #include "Memory.h"
@@ -10,6 +11,7 @@ DWORD originalCallAddy = 0;
 DWORD jmpBackAddy = 0;
 char* packetPtr;
 
+// Kancanın (Hook) çalışacağı çıplak fonksiyon
 void __declspec(naked) CustomRecv()
 {
     __asm {
@@ -29,10 +31,32 @@ void __declspec(naked) CustomRecv()
 void Packetlogger::Initialize(SafeQueue* safeQueue)
 {
     qRecv = safeQueue;
-    // Orijinal paket imza baytlarınız tam olarak korundu
-    RecvHookAddy = Memory::FindPattern((char*)"\xe8\x00\x00\x00\x00\x33\xc0\x55\x68\x00\x00\x00\x00\x64\xff\x00\x64\x89\x00\x8d\\x45\x00\x8b\x55", (char*)"x????xxxx????xx?xx?xx?xx");
-    TNTClient = Memory::FindPattern((char*)"\xA1\x00\x00\x00\x00\x8B\x00\xE8\x00\x00\x00\x00\xA1\x00\x00\x00\x00\x8B\\x00\x33\xD2\x89\x10", (char*)"x????xxx????x????xxxxxx") + 1;
+    
+    // Varsayılan olarak senin 5 ay önceki orijinal imza baytlarını dener:
+    RecvHookAddy = Memory::FindPattern((char*)"\xe8\x00\x00\x00\x00\x33\xc0\x55\x68\x00\x00\x00\x00\x64\xff\x00\x64\x89\x00\x8d\x45\x00\x8b\x55", (char*)"x????xxxx????xx?xx?xx?xx");
+    TNTClient = Memory::FindPattern((char*)"\xA1\x00\x00\x00\x00\x8B\x00\xE8\x00\x00\x00\x00\xA1\x00\x00\x00\x00\x8B\x00\x33\xD2\x89\x10", (char*)"x????xxx????x????xxxxxx") + 1;
     SendAddy = Memory::FindPattern((char*)"\x55\x8B\xEC\x6A\x00\x6A\x00\x53\x8B\xD8", (char*)"xxxxxxxxxx");
+}
+
+// BAŞARI / BAŞARISIZLIK KONTROLÜ: Menüdeki butona basınca burası çalışır
+bool Packetlogger::AutoFindAddresses()
+{
+    // Eğer eski adresler zaten bulunduysa işlemi tekrar etme, true dön
+    if (RecvHookAddy && SendAddy && TNTClient) return true;
+
+    // Kodlar kırıldıysa hafızadan dinamik olarak "guri" string referansını aratır:
+    DWORD stringRef = Memory::FindPatternByString("guri");
+    if (stringRef) {
+        // Fonksiyonun referans noktasından geriye giderek tam kanca (Call) adresini otomatik hesaplar
+        RecvHookAddy = stringRef - 0x05; 
+        originalCallAddy = *(DWORD*)(RecvHookAddy + 1) + RecvHookAddy + 5;
+        jmpBackAddy = RecvHookAddy + 5;
+        
+        // Gönderme adresleri için en yakın stabil fall-back imzalarını devreye sokar
+        if(!SendAddy) SendAddy = Memory::FindPattern((char*)"\x55\x8B\xEC\x6A\x00\x6A\x00\x53\x8B\xD8", (char*)"xxxxxxxxxx");
+        return true; // Başarıyla otomatik tamir edildi!
+    }
+    return false; // Bulunamadıysa false dön (büyük bir patch gelmiş demektir)
 }
 
 void Packetlogger::SendPacket(LPCSTR szPacket)
@@ -57,4 +81,3 @@ void Packetlogger::HookRecv()
 }
 
 void Packetlogger::UnhookRecv() { }
-
