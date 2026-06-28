@@ -1,7 +1,6 @@
 #include "Memory.h"
 #include <Psapi.h>
 
-// Gizlilik için orijinal modül bilgilerini dinamik çözümleyen fonksiyon
 typedef BOOL(WINAPI* pGetModuleInformation)(HANDLE, HMODULE, LPMODULEINFO, DWORD);
 
 DWORD Memory::FindPattern(char* pattern, char* mask)
@@ -10,7 +9,6 @@ DWORD Memory::FindPattern(char* pattern, char* mask)
     HMODULE hModule = GetModuleHandle(NULL);
     if (hModule == 0) return NULL;
 
-    // K7: Dinamik import çağrısı ile anti-cheat analizini yanıltma
     HMODULE hPsapi = GetModuleHandleA("psapi.dll");
     if (!hPsapi) hPsapi = LoadLibraryA("psapi.dll");
     
@@ -23,7 +21,7 @@ DWORD Memory::FindPattern(char* pattern, char* mask)
 
     if (mInfo.SizeOfImage == 0) {
         mInfo.lpBaseOfDll = (LPVOID)hModule;
-        mInfo.SizeOfImage = 0x1000000; // Varsayılan tarama havuzu aralığı
+        mInfo.SizeOfImage = 0x1000000;
     }
 
     DWORD base = (DWORD)mInfo.lpBaseOfDll;
@@ -38,12 +36,47 @@ DWORD Memory::FindPattern(char* pattern, char* mask)
 
         if (found) return base + i;
     }
+    return NULL; // Patladıysa çökertme, NULL dön ki menü anlasın
+}
+
+// Menüdeki butona basınca devreye girecek akıllı tarayıcı motoru
+DWORD Memory::FindPatternByString(const char* szString)
+{
+    MODULEINFO mInfo = { 0 };
+    HMODULE hModule = GetModuleHandle(NULL);
+    if (!hModule) return NULL;
+    
+    GetModuleInformation(GetCurrentProcess(), hModule, &mInfo, sizeof(MODULEINFO));
+    DWORD base = (DWORD)mInfo.lpBaseOfDll;
+    DWORD size = mInfo.SizeOfImage;
+
+    DWORD stringAddress = NULL;
+    size_t strLen = strlen(szString);
+    
+    for (DWORD i = 0; i < size - strLen; i++) {
+        if (memcmp((void*)(base + i), szString, strLen) == 0) {
+            stringAddress = base + i;
+            break;
+        }
+    }
+
+    if (!stringAddress) return NULL;
+
+    // Bellekte bu yazıyı push (0x68) eden yeri ara
+    for (DWORD i = 0; i < size - 5; i++) {
+        if (*(BYTE*)(base + i) == 0x68) { 
+            DWORD pushTarget = *(DWORD*)(base + i + 1);
+            if (pushTarget == stringAddress) {
+                return base + i; 
+            }
+        }
+    }
     return NULL;
 }
 
 bool Memory::Hook(void* toHook, void* ourFunc, int len)
 {
-    if (len < 5) return false;
+    if (!toHook || len < 5) return false;
     DWORD curProtection;
     VirtualProtect(toHook, len, PAGE_EXECUTE_READWRITE, &curProtection);
     memset(toHook, 0x90, len);
@@ -62,4 +95,3 @@ void Memory::Patch(BYTE* dst, BYTE* src, unsigned int size)
     memcpy(dst, src, size);
     VirtualProtect(dst, size, oldprotect, &oldprotect);
 }
-
